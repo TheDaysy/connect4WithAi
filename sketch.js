@@ -20,14 +20,44 @@ function setup() {
     ai:null
   })
   //create inputs and outputs
-  let player0Div = createDiv()
+  let player0Div = createDiv('Red')
   player0Div.id('player0Div')
-  let player1Div = createDiv()
+  player0Select = createSelect()
+  player0Select.parent('player0Div')
+  player0Select.class('player0')
+  player0Select.option('Human')
+  player0Select.option('Random')
+  player0Select.changed(newPlayerType)
+  let player1Div = createDiv('Yellow')
   player1Div.id('player1Div')
+  player1Select = createSelect()
+  player1Select.parent('player1Div')
+  player1Select.class('player1')
+  player1Select.option('Human')
+  player1Select.option('Random')
+  player1Select.changed(newPlayerType)
   whosTurn = createP('The game is yet to begin')
   startGameButton = createButton('Start new game')
   startGameButton.mousePressed(newGame)
   ellipseMode(CORNER)
+}
+
+function newPlayerType() {
+  if (this.class() == 'player0') {
+    players[0].playerType = this.selected()
+    if (this.selected() == 'Human') {
+      players[0].ai = null
+    } else if (this.selected() == 'Random') {
+      players[0].ai = new randomAi(0)
+    }
+  } else {
+    players[1].playerType = this.selected()
+    if (this.selected() == 'Human') {
+      players[1].ai = null
+    } else if (this.selected() == 'Random') {
+      players[1].ai = new randomAi(1)
+    }
+  }
 }
 
 function newGame() {
@@ -51,6 +81,9 @@ function newGame() {
   whosTurn.html(`It's ${players[currentPlayer].name}'s turn`)
   startGameButton.hide()
   endGame = false
+  if (players[currentPlayer].playerType != 'Human') {//tell ai player to take move if they are first
+    setTimeout(function(){players[currentPlayer].ai.turn()},500)
+  }
 }
 
 function mouseClicked(){
@@ -66,14 +99,14 @@ function mouseClicked(){
 function makeMove(col,playerId) {
   if (!endGame && gameBoard[col].length < 6) {
     noStroke()
-    fill(players[currentPlayer].color);
+    fill(players[playerId].color);
     let x = (width/7)*col
     let y = height-((height/6)*(gameBoard[col].length + 1))
     ellipse(x, y, min(width/7,height/6))
     gameBoard[col].push(new token(playerId,col,gameBoard[col].length))//push new move
     currentPlayer = (currentPlayer + 1) % 2//passes turn
     whosTurn.html(`It's ${players[currentPlayer].name}'s turn`)
-    let winstate = gameOver()
+    let winstate = gameOver(gameBoard)
     if (winstate.win == 'win') {
       startGameButton.show()
       whosTurn.html(`the winner is ${players[winstate.id].name}`)
@@ -84,38 +117,41 @@ function makeMove(col,playerId) {
       whosTurn.html(`It's a tie`)
       endGame = true
     }
+    if (players[currentPlayer].playerType != 'Human') {//tell ai player to take move if they are next
+      setTimeout(function(){players[currentPlayer].ai.turn()},500)
+    }
   }
 }
 
-function gameOver() {
+function gameOver(board) {
   let isWinner = {id : null,win : ' '}
   let fullcols = 0
-  for (let i = 0; i < gameBoard.length; i++) {
-    if (gameBoard[i].length == 6) {
+  for (let i = 0; i < board.length; i++) {
+    if (board[i].length == 6) {
       fullcols += 1
     }
-    gameBoard[i].forEach(element => {
+    board[i].forEach(element => {
       if (element.lastMove) {//find last move
-        if(element.winCheck(0)||element.winCheck(4)){//check diagonal topleft btmright
-          if (1 + element.winCheck(0) + element.winCheck(4) > 3) {
+        if(element.winCheck(0,board)||element.winCheck(4,board)){//check diagonal topleft btmright
+          if (1 + element.winCheck(0,board) + element.winCheck(4,board) > 3) {
             isWinner.id = element.playerId
             isWinner.win = 'win'
           }
         }
-        if (element.winCheck(2)||element.winCheck(6)) {//check diagonal btmleft topright
-          if (1 + element.winCheck(2) + element.winCheck(6) > 3) {
+        if (element.winCheck(2,board)||element.winCheck(6,board)) {//check diagonal btmleft topright
+          if (1 + element.winCheck(2,board) + element.winCheck(6,board) > 3) {
             isWinner.id = element.playerId
             isWinner.win = 'win'
           }
         }
-        if(element.winCheck(3)||element.winCheck(7)){//check horizontal
-          if (1 + element.winCheck(3) + element.winCheck(7) > 3) {
+        if(element.winCheck(3,board)||element.winCheck(7,board)){//check horizontal
+          if (1 + element.winCheck(3,board) + element.winCheck(7,board) > 3) {
             isWinner.id = element.playerId
             isWinner.win = 'win'
           }
         }
-        if(element.winCheck(5)){//check vertical
-          if (1 + element.winCheck(5) > 3) {
+        if(element.winCheck(5,board)){//check vertical
+          if (1 + element.winCheck(5,board) > 3) {
             isWinner.id = element.playerId
             isWinner.win = 'win'
           }
@@ -136,68 +172,85 @@ function token(playerId,x,y) {
   this.y = y
   this.lastMove = true
   
-  this.winCheck = function (toCheck) {
+  this.winCheck = function (toCheck,board) {
   //check neighbor given in param if same color, counts from top left clockwise starting from 0 - 7
     if (toCheck == 0) {//topleft
       if (this.x-1 >= 0) { 
-        if (gameBoard[(this.x)-1][(this.y)+1]) {
-          if (gameBoard[this.x-1][this.y+1].playerId === this.playerId) {
-            return 1 + int(gameBoard[this.x-1][this.y+1].winCheck(0))
+        if (board[(this.x)-1][(this.y)+1]) {
+          if (board[this.x-1][this.y+1].playerId === this.playerId) {
+            return 1 + int(board[this.x-1][this.y+1].winCheck(0,board))
           }
         }
       }
     } else if (toCheck == 1) {//topmiddle
-      if (gameBoard[this.x][this.y+1]) {
-        if (gameBoard[this.x][this.y+1].playerId === this.playerId) {
-          return 1 + int(gameBoard[this.x][this.y+1].winCheck(1))
+      if (board[this.x][this.y+1]) {
+        if (board[this.x][this.y+1].playerId === this.playerId) {
+          return 1 + int(board[this.x][this.y+1].winCheck(1,board))
         }
       }
     } else if (toCheck == 2) {//topright
       if (this.x+1 <= 6) {  
-        if (gameBoard[this.x+1][this.y+1]) {
-          if (gameBoard[this.x+1][this.y+1].playerId === this.playerId) {
-            return 1 + int(gameBoard[this.x+1][this.y+1].winCheck(2))
+        if (board[this.x+1][this.y+1]) {
+          if (board[this.x+1][this.y+1].playerId === this.playerId) {
+            return 1 + int(board[this.x+1][this.y+1].winCheck(2,board))
           }
         }
       }
     } else if (toCheck == 3) {//rightmiddle
       if (this.x+1 <= 6) {   
-        if (gameBoard[this.x+1][this.y]) {
-          if (gameBoard[this.x+1][this.y].playerId === this.playerId) {
-            return 1 + int(gameBoard[this.x+1][this.y].winCheck(3))
+        if (board[this.x+1][this.y]) {
+          if (board[this.x+1][this.y].playerId === this.playerId) {
+            return 1 + int(board[this.x+1][this.y].winCheck(3,board))
           }
         }
       }
     } else if (toCheck == 4) {//bottomright
       if (this.x+1 <= 6) {   
-        if (gameBoard[this.x+1][this.y-1]) {
-          if (gameBoard[this.x+1][this.y-1].playerId === this.playerId) {
-            return 1 + int(gameBoard[this.x+1][this.y-1].winCheck(4))
+        if (board[this.x+1][this.y-1]) {
+          if (board[this.x+1][this.y-1].playerId === this.playerId) {
+            return 1 + int(board[this.x+1][this.y-1].winCheck(4,board))
           }
         }
       }
     } else if (toCheck == 5) {//bottommiddle
-      if (gameBoard[this.x][this.y-1]) {
-        if (gameBoard[this.x][this.y-1].playerId === this.playerId) {
-          return 1 + int(gameBoard[this.x][this.y-1].winCheck(5))
+      if (board[this.x][this.y-1]) {
+        if (board[this.x][this.y-1].playerId === this.playerId) {
+          return 1 + int(board[this.x][this.y-1].winCheck(5,board))
         }
       }
     } else if (toCheck == 6) {//bottomleft
       if (this.x-1 >= 0) { 
-        if (gameBoard[this.x-1][this.y-1]) {
-          if (gameBoard[this.x-1][this.y-1].playerId === this.playerId) {
-            return 1 + int(gameBoard[this.x-1][this.y-1].winCheck(6))
+        if (board[this.x-1][this.y-1]) {
+          if (board[this.x-1][this.y-1].playerId === this.playerId) {
+            return 1 + int(board[this.x-1][this.y-1].winCheck(6,board))
           }
         }
       }
     } else if (toCheck == 7) {//leftmiddle
       if (this.x-1 >= 0) {
-        if (gameBoard[this.x-1][this.y]) {
-          if (gameBoard[this.x-1][this.y].playerId === this.playerId) {
-            return 1 + int(gameBoard[this.x-1][this.y].winCheck(7))
+        if (board[this.x-1][this.y]) {
+          if (board[this.x-1][this.y].playerId === this.playerId) {
+            return 1 + int(board[this.x-1][this.y].winCheck(7,board))
           }
         }
       }
     } return int(0)//if neighbor dosent match or there is no neighbor return 0
+  }
+}
+
+function randomAi(id) {
+  this.playerId = id
+  this.avaliableMoves = []
+  this.move = null
+  this.turn = function () {
+    for (let i = 0; i < 7; i++) {
+      if (gameBoard[i].length < 6) {
+        this.avaliableMoves.push(i)
+      }
+    }
+    this.move = this.avaliableMoves[int(random(this.avaliableMoves.length))]
+    this.avaliableMoves = []
+    makeMove(this.move,this.playerId)
+    
   }
 }
