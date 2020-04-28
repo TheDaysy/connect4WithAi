@@ -2,7 +2,8 @@ let gameBoard = []
 let players = []
 let currentPlayer
 let endGame = false
-
+let minimaxcalled = 0 //debug
+let branchpruned = 0 //debug
 function setup() {
   canvas = createCanvas(400,400)
   players.push({
@@ -27,6 +28,7 @@ function setup() {
   player0Select.class('player0')
   player0Select.option('Human')
   player0Select.option('Random')
+  player0Select.option('Minimax')
   player0Select.changed(newPlayerType)
   let player1Div = createDiv('Yellow')
   player1Div.id('player1Div')
@@ -35,6 +37,7 @@ function setup() {
   player1Select.class('player1')
   player1Select.option('Human')
   player1Select.option('Random')
+  player1Select.option('Minimax')
   player1Select.changed(newPlayerType)
   whosTurn = createP('The game is yet to begin')
   startGameButton = createButton('Start new game')
@@ -49,6 +52,8 @@ function newPlayerType() {
       players[0].ai = null
     } else if (this.selected() == 'Random') {
       players[0].ai = new randomAi(0)
+    } else if (this.selected() == 'Minimax') {
+      players[0].ai = new minimaxAi(0)
     }
   } else {
     players[1].playerType = this.selected()
@@ -56,6 +61,8 @@ function newPlayerType() {
       players[1].ai = null
     } else if (this.selected() == 'Random') {
       players[1].ai = new randomAi(1)
+    } else if (this.selected() == 'Minimax') {
+      players[1].ai = new minimaxAi(1)
     }
   }
 }
@@ -87,7 +94,7 @@ function newGame() {
 }
 
 function mouseClicked(){
-  if (mouseX > 0 && mouseX < width && mouseY > 0 && mouseY < height) {
+  if (mouseX > 0 && mouseX < width && mouseY > 0 && mouseY < height && players[currentPlayer].playerType == 'Human') {
     for (let i = 0; i < 7; i++) {
       if (mouseX > (width/7)*i && mouseX < (width/7)*(i+1)) {
         makeMove(i,currentPlayer)
@@ -238,8 +245,8 @@ function token(playerId,x,y) {
   }
 }
 
-function randomAi(id) {
-  this.playerId = id
+function randomAi(playerId) {
+  this.playerId = playerId
   this.avaliableMoves = []
   this.move = null
   this.turn = function () {
@@ -252,5 +259,85 @@ function randomAi(id) {
     this.avaliableMoves = []
     makeMove(this.move,this.playerId)
     
+  }
+}
+
+function minimaxAi(playerId) {
+  this.playerId = playerId
+  this.turn = function () {
+    minimaxcalled = 0//debug
+    branchpruned = 0//debug
+    let nextmove = [{score:-Infinity,col:null}]
+    //average number of moves in a col
+    let totalmoves = 0
+    gameBoard.forEach(element => {
+      totalmoves += element.length
+    });
+    let avemoves = int((totalmoves/gameBoard.length)*0.5)
+    console.log(avemoves)
+    for (let i = 0; i < gameBoard.length; i++) {//for every avalaiable move
+      if (gameBoard[i].length < 6) {
+        gameBoard[i].push(new token(this.playerId,i,gameBoard[i].length))//push new move
+        let minimaxout = {score: this.miniMax(gameBoard,7+avemoves,false,-Infinity,Infinity) , col: i}//run minimax on that board
+        console.log(minimaxout) //debug
+        if (minimaxout.score > nextmove[0].score) { //make the minimaxout best move if it scores higher
+          nextmove = []
+          nextmove.push(minimaxout)
+        } else if (minimaxout.score === nextmove[0].score) { //if multiple score the same add them to the array
+          nextmove.push(minimaxout)
+        }
+        gameBoard[i].pop()//pop that token
+      }
+    }
+    console.log(`called:${minimaxcalled},bestscore:${nextmove[0].score},branchespruned:${branchpruned}`) //debug
+    makeMove(nextmove[int(random(0,nextmove.length))].col,this.playerId);//play random index from the array of best moves
+  }
+  this.miniMax = function(board,depth,isMaximising,alpha,beta){
+    winstate = gameOver(board)
+    minimaxcalled += 1 //debug
+    if (winstate.win == 'win') {//if game is won
+      if (winstate.id == this.playerId) {//if i won
+        return 10 + depth
+      } else{//if i lost
+        return -10 - depth
+      }
+    } else if (winstate.win == 'tie') {//if game is tied
+      return 0
+    } else{//if game is still going
+      if (depth >= 0) { //debug
+        if (isMaximising) {//is maximising players move
+          let bestmove = -Infinity
+          for (let i = 0; i < board.length; i++) {//for every avalaiable move
+            if (board[i].length < 6) {
+              board[i].push(new token(this.playerId,i,board[i].length))//push new move
+              bestmove = max(this.miniMax(board,depth-1,false,alpha,beta),bestmove)//run minimax use max() to set bestmove
+              board[i].pop()//pop that token
+              alpha = max(alpha,bestmove)
+              if (beta <= alpha) {
+                branchpruned +=1
+                break
+              }
+            }
+          }
+          return bestmove
+        } else {//is minimising players move
+          let bestmove = Infinity
+          for (let i = 0; i < board.length; i++) {//for every avalaiable move
+            if (board[i].length < 6) {
+              board[i].push(new token((this.playerId + 1) % 2,i,board[i].length))//push new move
+              bestmove = min(this.miniMax(board,depth-1,true,alpha,beta),bestmove)//run minimax use min() to set bestmove
+              board[i].pop()//pop that token
+              beta = min(beta,bestmove)
+              if (beta <= alpha) {
+                branchpruned += 1
+                break
+              }
+            }
+          }
+          return bestmove
+        }
+      }
+      return 1
+    }
   }
 }
